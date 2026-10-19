@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * Universal Website Scroll Video Recorder
+ * Web Recorder
+ * A simple web recorder for your landing page website or any other website
+ * that has huge height, for your social media or just documenting your job.
+ * 
  * Uses Playwright + Native requestAnimationFrame + FFmpeg
  * 
  * Usage:

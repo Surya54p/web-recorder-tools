@@ -1,7 +1,7 @@
 {
   "name": "web-recorder",
   "version": "1.0.0",
-  "description": "",
+  "description": "A simple web recorder for your landing page website or any other website that has huge height, for your social media or just documenting your job.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

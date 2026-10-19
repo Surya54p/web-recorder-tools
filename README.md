@@ -1,6 +1,8 @@
 # Web Recorder
 
-CLI tool to record ultra-smooth, high-framerate website showcase videos (up to 150 FPS) for social media (Instagram Reels, TikTok, Twitter/X, and product demos) using Playwright and FFmpeg.
+A simple web recorder for your landing page website or any other website that has huge height, for your social media or just documenting your job.
+
+Record ultra-smooth, high-framerate website showcase videos (up to 250 FPS) for Instagram Reels, TikTok, Twitter/X, and portfolio product demos using Playwright and FFmpeg.
 
 ## Features
 
