@@ -39,17 +39,17 @@ ln -s $(pwd)/record.js ~/.local/bin/web-record
 ## Usage
 
 ```bash
-# Default: speed lambat & 150 FPS (Instagram Reels 9:16)
+# Default: slow speed & 150 FPS (Instagram Reels 9:16)
 web-record http://localhost:5173 --preset reels
 
-# Custom speed & FPS dalam satu line command
-web-record http://localhost:5173 --preset reels --speed lumayan --fps 200
+# Custom speed and FPS
+web-record http://localhost:5173 --preset reels --speed medium --fps 200
 
-# Kecepatan cepat dengan 250 FPS super halus
-web-record http://localhost:5173 --preset reels --speed cepat --fps 250
+# Fast scroll with ultra-smooth 250 FPS
+web-record http://localhost:5173 --preset reels --speed fast --fps 250
 
 # Custom output destination
-web-record http://localhost:5173 --preset reels --speed lambat --fps 150 --out ~/Videos/showcase.mp4
+web-record http://localhost:5173 --preset reels --speed slow --fps 150 --out ~/Videos/showcase.mp4
 ```
 
 ### CLI Options
@@ -57,7 +57,7 @@ web-record http://localhost:5173 --preset reels --speed lambat --fps 150 --out ~
 | Option | Description | Choices / Default |
 | --- | --- | --- |
 | `--preset` | Aspect ratio presets | `reels` (9:16), `feed` (1:1), `desktop` (16:10) *(Default: `desktop`)* |
-| `--speed` | Scroll speed preset | `lambat` (18s), `lumayan` (12s), `cepat` (7s) *(Default: `lambat`)* |
+| `--speed` | Scroll speed preset | `slow` (18s), `medium` (12s), `fast` (7s) *(Default: `slow`)* <br>*(Aliases: `lambat`, `lumayan`, `cepat`)* |
 | `--fps` | Video output framerate | `100`, `150`, `200`, `250` *(Default: `150`)* |
 | `--duration` | Custom duration in seconds (overrides `--speed`) | Optional *(e.g. `20`)* |
 | `--easing` | Scroll curve | `linear`, `ease` *(Default: `linear`)* |
