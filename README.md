@@ -6,14 +6,15 @@ Record ultra-smooth, high-framerate website showcase videos (up to 250 FPS) for 
 
 ## Features
 
-- **Buttery Smooth Scroll:** Uses native browser `window.requestAnimationFrame` loop, bypassing standard discrete timer jitter.
-- **Ultra High Framerate:** Supports 60 FPS, 100 FPS, up to 150 FPS exports with H.264 / `yuv420p` mobile compatibility.
+- **Buttery Smooth Motion:** Uses native browser `window.requestAnimationFrame` loops, preventing micro-stutters and timer drift.
+- **Ultra High Framerate:** Supports 100 FPS, 150 FPS, 200 FPS, and 250 FPS exports with H.264 / `yuv420p` mobile compatibility.
+- **Clean CLI Experience:** Minimalist terminal UI with animated spinners and silent background FFmpeg transcoding.
 - **Social Media Ready Presets:**
-  - `reels`: 1080x1920 (9:16 mobile)
-  - `feed`: 1080x1080 (1:1 square)
-  - `desktop`: 1280x800 (16:10 laptop/browser)
-- **Zero Configuration for Projects:** Standalone CLI tool. Works on any local dev server (`localhost:5173`, `localhost:3000`) or public live URLs without modifying target projects.
-- **Clean Output:** Automatically hides scrollbars and overrides conflicting CSS smooth scroll rules during capture.
+  - `reels`: 1080x1920 (9:16 vertical for Instagram Reels, TikTok, Shorts)
+  - `feed`: 1080x1080 (1:1 square for Instagram Feed, Twitter/X)
+  - `desktop`: 1280x800 (16:10 landscape for desktop & product showcase)
+- **Zero Project Overhead:** Standalone tool. Point to any local dev server (`localhost:5173`, `localhost:3000`) or public URL without installing dependencies into your project codebase.
+- **Automatic Style Cleanup:** Disables conflicting CSS `scroll-behavior: smooth` rules and hides scrollbars during recording for clean captures.
 
 ## Prerequisites
 
@@ -29,42 +30,76 @@ npm install
 npx playwright install chromium
 ```
 
-To use it globally from anywhere:
+### Global CLI Setup (Recommended)
+
+Link the executable to your local bin directory so you can run `web-record` anywhere:
 
 ```bash
 chmod +x record.js
-ln -s $(pwd)/record.js ~/.local/bin/web-record
+mkdir -p ~/.local/bin
+ln -sf $(pwd)/record.js ~/.local/bin/web-record
 ```
 
-## Usage
+Make sure `~/.local/bin` is in your system's `PATH`.
 
+## Usage & Command Examples
+
+### 1. Default Quick Record (150 FPS, Slow Pace)
 ```bash
-# Default: slow speed & 150 FPS (Instagram Reels 9:16)
 web-record http://localhost:5173 --preset reels
+```
 
-# Custom speed and FPS
+### 2. High-Framerate Social Media Presets
+```bash
+# Instagram Reels / TikTok (9:16 Vertical, 200 FPS, Medium Pace)
 web-record http://localhost:5173 --preset reels --speed medium --fps 200
 
-# Fast scroll with ultra-smooth 250 FPS
-web-record http://localhost:5173 --preset reels --speed fast --fps 250
+# Instagram Feed Square (1:1, 150 FPS, Slow Pace)
+web-record http://localhost:5173 --preset feed --speed slow --fps 150
 
-# Custom output destination
-web-record http://localhost:5173 --preset reels --speed slow --fps 150 --out ~/Videos/showcase.mp4
+# Desktop / Landscape (16:10, 100 FPS, Fast Pace)
+web-record http://localhost:5173 --preset desktop --speed fast --fps 100
 ```
 
-### CLI Options
+### 3. Maximum Fluidity (250 FPS)
+```bash
+web-record http://localhost:5173 --preset reels --speed medium --fps 250
+```
 
-| Option | Description | Choices / Default |
-| --- | --- | --- |
-| `--preset` | Aspect ratio presets | `reels` (9:16), `feed` (1:1), `desktop` (16:10) *(Default: `desktop`)* |
-| `--speed` | Scroll speed preset | `slow` (18s), `medium` (12s), `fast` (7s) *(Default: `slow`)* <br>*(Aliases: `lambat`, `lumayan`, `cepat`)* |
-| `--fps` | Video output framerate | `100`, `150`, `200`, `250` *(Default: `150`)* |
-| `--duration` | Custom duration in seconds (overrides `--speed`) | Optional *(e.g. `20`)* |
-| `--easing` | Scroll curve | `linear`, `ease` *(Default: `linear`)* |
-| `--pause-start`| Pause at top before scroll | `2` (seconds) |
-| `--pause-end`  | Pause at bottom before ending | `2` (seconds) |
-| `--scale` | Device scale factor (Retina 2x crispness) | `2` |
-| `--out` | Output file path (`.mp4`) | `showcase_<preset>_<timestamp>.mp4` |
+### 4. Custom Output Destination
+```bash
+web-record http://localhost:5173 --preset reels --out ~/Videos/star-courts-reels.mp4
+```
+
+### 5. Custom Exact Duration & Easing
+```bash
+# Custom 20-second linear scroll
+web-record http://localhost:5173 --preset reels --duration 20 --easing linear
+
+# Smooth ease-in-out deceleration
+web-record http://localhost:5173 --preset reels --duration 15 --easing ease
+```
+
+### 6. Public Production Website
+```bash
+web-record https://example.com --preset reels --speed slow --fps 150
+```
+
+## CLI Reference
+
+| Flag | Type | Choices / Default | Description |
+| --- | --- | --- | --- |
+| `<URL>` | `string` | *(Required)* | Target URL (`http://localhost:...` or `https://...`) |
+| `--preset` | `string` | `desktop` (default), `reels`, `feed` | Viewport aspect ratio preset |
+| `--speed` | `string` | `slow` (default), `medium`, `fast` | Preconfigured scroll duration (`slow`: 18s, `medium`: 12s, `fast`: 7s). Also accepts aliases: `lambat`, `lumayan`, `cepat`. |
+| `--fps` | `number` | `100`, `150` (default), `200`, `250` | Video framerate output |
+| `--duration` | `number` | Optional | Custom scroll duration in seconds (overrides `--speed`) |
+| `--easing` | `string` | `linear` (default), `ease` | Scroll motion curve (`linear` for constant speed, `ease` for cubic in-out) |
+| `--pause-start` | `number` | `2` (default) | Pause duration at the top before scrolling begins (seconds) |
+| `--pause-end` | `number` | `2` (default) | Pause duration at the bottom before ending the video (seconds) |
+| `--scale` | `number` | `2` (default), `1` | Device scale factor (Retina 2x resolution by default) |
+| `--out` | `string` | `showcase_<preset>_<timestamp>.mp4` | Custom output file destination |
+| `--help`, `-h` | - | - | Show command-line help menu |
 
 ## License
 
