@@ -37,26 +37,30 @@ ln -s $(pwd)/record.js ~/.local/bin/web-record
 ## Usage
 
 ```bash
-# Record Instagram Reels format (1080x1920, 150 FPS)
+# Default: speed lambat & 150 FPS (Instagram Reels 9:16)
 web-record http://localhost:5173 --preset reels
 
-# Custom output destination
-web-record http://localhost:5173 --preset reels --out ~/Videos/showcase.mp4
+# Custom speed & FPS dalam satu line command
+web-record http://localhost:5173 --preset reels --speed lumayan --fps 200
 
-# Custom duration and framerate
-web-record https://example.com --preset desktop --duration 12 --fps 100
+# Kecepatan cepat dengan 250 FPS super halus
+web-record http://localhost:5173 --preset reels --speed cepat --fps 250
+
+# Custom output destination
+web-record http://localhost:5173 --preset reels --speed lambat --fps 150 --out ~/Videos/showcase.mp4
 ```
 
 ### CLI Options
 
-| Option | Description | Default |
+| Option | Description | Choices / Default |
 | --- | --- | --- |
-| `--preset` | Aspect ratio: `reels` (9:16), `feed` (1:1), `desktop` (16:10) | `desktop` |
-| `--duration` | Scroll duration in seconds | `16` |
-| `--fps` | Video output framerate | `150` |
-| `--easing` | Scroll curve: `linear` or `ease` | `linear` |
-| `--pause-start` | Initial pause at top before scroll (seconds) | `2` |
-| `--pause-end` | Final pause at bottom before ending (seconds) | `2` |
+| `--preset` | Aspect ratio presets | `reels` (9:16), `feed` (1:1), `desktop` (16:10) *(Default: `desktop`)* |
+| `--speed` | Scroll speed preset | `lambat` (18s), `lumayan` (12s), `cepat` (7s) *(Default: `lambat`)* |
+| `--fps` | Video output framerate | `100`, `150`, `200`, `250` *(Default: `150`)* |
+| `--duration` | Custom duration in seconds (overrides `--speed`) | Optional *(e.g. `20`)* |
+| `--easing` | Scroll curve | `linear`, `ease` *(Default: `linear`)* |
+| `--pause-start`| Pause at top before scroll | `2` (seconds) |
+| `--pause-end`  | Pause at bottom before ending | `2` (seconds) |
 | `--scale` | Device scale factor (Retina 2x crispness) | `2` |
 | `--out` | Output file path (`.mp4`) | `showcase_<preset>_<timestamp>.mp4` |
 

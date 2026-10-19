@@ -30,11 +30,15 @@ Options:
                                    - desktop: 1280x800 (16:10)
                                    - reels:   1080x1920 (9:16 mobile)
                                    - feed:    1080x1080 (1:1 square)
-  --duration <seconds>             Scroll duration in seconds (default: 16)
-  --easing <ease|linear>           Scroll acceleration curve (default: linear)
+  --speed <lambat|lumayan|cepat>   Scroll speed (default: lambat)
+                                   - lambat:  18s (sangat santai, cocok showcase panjang)
+                                   - lumayan: 12s (kecepatan sedang)
+                                   - cepat:   7s  (singkat & dinamis)
+  --fps <100|150|200|250>          Video output framerate (default: 150)
+  --duration <seconds>             Custom duration in seconds (overrides --speed)
+  --easing <linear|ease>           Scroll curve (default: linear)
   --pause-start <seconds>          Pause at top before scroll (default: 2)
   --pause-end <seconds>            Pause at bottom after scroll (default: 2)
-  --fps <number>                   Output video framerate (default: 150)
   --scale <1|2>                    Device scale factor / Retina (default: 2)
   --out <filepath>                 Output .mp4 file path
   `);
@@ -52,11 +56,26 @@ function getArgValue(flag, defaultValue) {
 }
 
 const preset = getArgValue('--preset', 'desktop');
-const durationSec = parseFloat(getArgValue('--duration', '16'));
+
+// Mapping speed preset
+const speedPresets = {
+  lambat: 18,
+  lumayan: 12,
+  cepat: 7,
+};
+
+const speedArg = getArgValue('--speed', 'lambat').toLowerCase();
+const defaultDuration = speedPresets[speedArg] !== undefined ? speedPresets[speedArg] : 18;
+const durationSec = parseFloat(getArgValue('--duration', defaultDuration.toString()));
+
 const easingType = getArgValue('--easing', 'linear');
 const pauseStartSec = parseFloat(getArgValue('--pause-start', '2'));
 const pauseEndSec = parseFloat(getArgValue('--pause-end', '2'));
-const fps = parseInt(getArgValue('--fps', '150'), 10);
+
+// Allowed FPS: 100, 150, 200, 250 (default: 150)
+const rawFps = parseInt(getArgValue('--fps', '150'), 10);
+const fps = [100, 150, 200, 250].includes(rawFps) ? rawFps : (isNaN(rawFps) ? 150 : rawFps);
+
 const scale = parseInt(getArgValue('--scale', '2'), 10);
 
 const presets = {
@@ -77,7 +96,8 @@ const finalOutPath = path.resolve(getArgValue('--out', defaultOutPath));
 (async () => {
   console.log(`🎬 Memulai perekaman website: ${targetUrl}`);
   console.log(`📐 Preset: ${preset} (${viewport.width}x${viewport.height}), Scale: ${scale}x`);
-  console.log(`⏱️ Durasi scroll: ${durationSec}s [Easing: ${easingType}] (Pause top: ${pauseStartSec}s, Pause bottom: ${pauseEndSec}s)`);
+  console.log(`⚡ Speed: ${speedArg} (${durationSec}s scroll) | FPS: ${fps} | Easing: ${easingType}`);
+  console.log(`⏱️ Pause top: ${pauseStartSec}s | Pause bottom: ${pauseEndSec}s`);
 
   const browser = await chromium.launch({
     headless: true,
