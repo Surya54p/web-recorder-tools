@@ -21,6 +21,10 @@ Usage:
   web-record <URL> [options]
 
 Options:
+  --mode <realtime|frame>          Recording method/engine (default: realtime)
+                                   - realtime: Playwright native screencast
+                                   - frame:    Deterministic frame-by-frame capture
+                                               (ultra-smooth butter scroll, zero jitter)
   --preset <desktop|reels|feed>    Preset aspect ratio (default: desktop)
                                    - desktop: 1280x800 (16:10)
                                    - reels:   1080x1920 (9:16 mobile)
@@ -30,7 +34,7 @@ Options:
                                    - medium: 12s (balanced speed)
                                    - fast:   7s  (quick & punchy)
                                    (also accepts: lambat, lumayan, cepat)
-  --fps <100|150|200|250>          Video output framerate (default: 150)
+  --fps <number>                   Video output framerate (default: 150 for realtime, 60 for frame)
   --duration <seconds>             Custom duration in seconds (overrides --speed)
   --easing <linear|ease>           Scroll curve (default: linear)
   --pause-start <seconds>          Pause at top before scroll (default: 2)
@@ -50,6 +54,12 @@ function getArgValue(flag, defaultValue) {
   }
   return defaultValue;
 }
+
+const modeArg = (getArgValue('--mode', '') || getArgValue('--method', '')).toLowerCase();
+const isFrameMode = ['frame', 'frame-by-frame', 'deterministic', 'butter'].includes(modeArg) ||
+                    args.includes('--frame-by-frame') ||
+                    args.includes('--butter');
+const mode = isFrameMode ? 'frame' : 'realtime';
 
 const preset = getArgValue('--preset', 'desktop');
 
@@ -79,9 +89,9 @@ const easingType = getArgValue('--easing', 'linear');
 const pauseStartSec = parseFloat(getArgValue('--pause-start', '2'));
 const pauseEndSec = parseFloat(getArgValue('--pause-end', '2'));
 
-// Allowed FPS: 100, 150, 200, 250 (default: 150)
-const rawFps = parseInt(getArgValue('--fps', '150'), 10);
-const fps = [100, 150, 200, 250].includes(rawFps) ? rawFps : (isNaN(rawFps) ? 150 : rawFps);
+// Framerate: default 60 for frame mode, 150 for realtime mode
+const rawFps = parseInt(getArgValue('--fps', isFrameMode ? '60' : '150'), 10);
+const fps = isNaN(rawFps) || rawFps <= 0 ? (isFrameMode ? 60 : 150) : rawFps;
 
 const scale = parseInt(getArgValue('--scale', '2'), 10);
 
@@ -136,7 +146,7 @@ class TerminalSpinner {
   console.log(`\n● Web Recorder`);
   console.log(`  Target   : ${targetUrl}`);
   console.log(`  Preset   : ${preset} (${viewport.width}x${viewport.height}) @ ${scale}x Retina`);
-  console.log(`  Settings : speed=${speedKey} (${durationSec}s) | fps=${fps} | easing=${easingType}\n`);
+  console.log(`  Settings : mode=${mode}${isFrameMode ? ' (frame-by-frame butter smooth)' : ''} | speed=${speedKey} (${durationSec}s) | fps=${fps} | easing=${easingType}\n`);
 
   const browserSpinner = new TerminalSpinner('Launching browser and loading page...');
   browserSpinner.start();
@@ -154,14 +164,17 @@ class TerminalSpinner {
     ],
   });
 
-  const context = await browser.newContext({
+  const contextOptions = {
     viewport: viewport,
-    recordVideo: {
+    deviceScaleFactor: scale,
+  };
+  if (!isFrameMode) {
+    contextOptions.recordVideo = {
       dir: tempDir,
       size: viewport,
-    },
-    deviceScaleFactor: scale,
-  });
+    };
+  }
+  const context = await browser.newContext(contextOptions);
 
   const page = await context.newPage();
 
@@ -183,135 +196,279 @@ class TerminalSpinner {
     `
   });
 
-  const recordSpinner = new TerminalSpinner(`Recording page scroll (${durationSec}s @ ${fps} FPS)...`);
-  recordSpinner.start();
+  if (isFrameMode) {
+    const pauseStartFrames = Math.max(0, Math.round(pauseStartSec * fps));
+    const pauseEndFrames = Math.max(0, Math.round(pauseEndSec * fps));
+    const scrollFrames = Math.max(2, Math.round(durationSec * fps));
+    const totalFrames = pauseStartFrames + scrollFrames + pauseEndFrames;
 
-  // Initial pause at top
-  if (pauseStartSec > 0) {
-    await page.waitForTimeout(pauseStartSec * 1000);
-  }
+    const recordSpinner = new TerminalSpinner(`Preparing frame-by-frame capture (${totalFrames} frames @ ${fps} FPS)...`);
+    recordSpinner.start();
 
-  // Perform smooth programmatic scroll
-  const durationMs = durationSec * 1000;
-  await page.evaluate(({ duration, easing }) => {
-    return new Promise((resolve) => {
+    // Pre-scroll slightly to trigger lazy-loaded assets, then return to top
+    await page.evaluate(async () => {
       const doc = document.documentElement;
       const body = document.body;
+      const h = Math.max(doc ? doc.scrollHeight : 0, body ? body.scrollHeight : 0);
+      window.scrollTo(0, h);
+      await new Promise(r => setTimeout(r, 250));
+      window.scrollTo(0, 0);
+      await new Promise(r => setTimeout(r, 250));
+    });
 
-      let targetElement = null;
-      let maxScroll = Math.max(doc.scrollHeight, body ? body.scrollHeight : 0);
+    const ffmpegArgs = [
+      '-y',
+      '-nostdin',
+      '-loglevel', 'error',
+      '-f', 'image2pipe',
+      '-vcodec', 'png',
+      '-r', fps.toString(),
+      '-i', 'pipe:0',
+      '-c:v', 'libx264',
+      '-preset', 'medium',
+      '-crf', '12',
+      '-pix_fmt', 'yuv420p',
+      finalOutPath
+    ];
 
-      const allElements = document.querySelectorAll('*');
-      for (const el of allElements) {
-        if (el.scrollHeight > maxScroll) {
-          const style = window.getComputedStyle(el);
-          if (['auto', 'scroll'].includes(style.overflowY) || ['auto', 'scroll'].includes(style.overflow)) {
-            maxScroll = el.scrollHeight;
-            targetElement = el;
+    const ffmpegProc = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'ignore', 'pipe'] });
+    let ffmpegErr = '';
+    ffmpegProc.stderr.on('data', chunk => { ffmpegErr += chunk.toString(); });
+
+    const writeFrame = async (buf) => {
+      if (!ffmpegProc.stdin.write(buf)) {
+        await new Promise(r => ffmpegProc.stdin.once('drain', r));
+      }
+    };
+
+    const easeInOutCubic = (t) => {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    };
+
+    const setPageProgress = async (progress) => {
+      await page.evaluate(({ progress }) => {
+        const doc = document.documentElement;
+        const body = document.body;
+        let targetElement = document.querySelector('[data-web-recorder-target="true"]');
+        if (!targetElement) {
+          let maxScroll = Math.max(doc ? doc.scrollHeight : 0, body ? body.scrollHeight : 0);
+          for (const el of document.querySelectorAll('*')) {
+            if (el.scrollHeight > maxScroll) {
+              const style = window.getComputedStyle(el);
+              if (['auto', 'scroll'].includes(style.overflowY) || ['auto', 'scroll'].includes(style.overflow)) {
+                maxScroll = el.scrollHeight;
+                targetElement = el;
+              }
+            }
+          }
+          if (targetElement) {
+            targetElement.setAttribute('data-web-recorder-target', 'true');
           }
         }
-      }
 
-      const setScrollPos = (pos) => {
+        const clientHeight = targetElement ? targetElement.clientHeight : window.innerHeight;
+        const scrollHeight = targetElement ? targetElement.scrollHeight : Math.max(
+          body ? body.scrollHeight : 0,
+          body ? body.offsetHeight : 0,
+          doc ? doc.clientHeight : 0,
+          doc ? doc.scrollHeight : 0,
+          doc ? doc.offsetHeight : 0
+        );
+        const maxScrollDist = Math.max(0, scrollHeight - clientHeight);
+        const pos = maxScrollDist * progress;
+
         if (targetElement) {
           targetElement.scrollTop = pos;
         }
         window.scrollTo(0, pos);
         if (doc) doc.scrollTop = pos;
         if (body) body.scrollTop = pos;
-      };
+      }, { progress });
+    };
 
-      const easeInOutCubic = (t) => {
-        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-      };
+    let renderedFrames = 0;
 
-      const startTime = performance.now();
+    // 1. Initial pause at top
+    await setPageProgress(0);
+    const firstFrameBuf = await page.screenshot({ type: 'png' });
+    for (let i = 0; i < pauseStartFrames; i++) {
+      await writeFrame(firstFrameBuf);
+      renderedFrames++;
+      if (renderedFrames % 5 === 0 || renderedFrames === totalFrames) {
+        recordSpinner.update(`Rendering frame-by-frame: frame ${renderedFrames}/${totalFrames} (${Math.round((renderedFrames / totalFrames) * 100)}%)...`);
+      }
+    }
 
-      const step = (currentTime) => {
-        const elapsed = currentTime - startTime;
-        const linearProgress = Math.min(elapsed / duration, 1);
-        const progress = easing === 'linear' ? linearProgress : easeInOutCubic(linearProgress);
+    // 2. Continuous scroll frames
+    let lastFrameBuf = firstFrameBuf;
+    for (let i = 0; i < scrollFrames; i++) {
+      const linearProgress = scrollFrames <= 1 ? 1 : i / (scrollFrames - 1);
+      const progress = easingType === 'linear' ? linearProgress : easeInOutCubic(linearProgress);
+      await setPageProgress(progress);
+      lastFrameBuf = await page.screenshot({ type: 'png' });
+      await writeFrame(lastFrameBuf);
+      renderedFrames++;
+      if (renderedFrames % 5 === 0 || renderedFrames === totalFrames) {
+        recordSpinner.update(`Rendering frame-by-frame: frame ${renderedFrames}/${totalFrames} (${Math.round((renderedFrames / totalFrames) * 100)}%)...`);
+      }
+    }
 
-        const currentClientHeight = targetElement ? targetElement.clientHeight : window.innerHeight;
-        const currentScrollHeight = targetElement ? targetElement.scrollHeight : Math.max(
-          body ? body.scrollHeight : 0,
-          body ? body.offsetHeight : 0,
-          doc.clientHeight,
-          doc.scrollHeight,
-          doc.offsetHeight
-        );
-        const maxScrollDist = Math.max(0, currentScrollHeight - currentClientHeight);
+    // 3. Pause at bottom
+    for (let i = 0; i < pauseEndFrames; i++) {
+      await writeFrame(lastFrameBuf);
+      renderedFrames++;
+      if (renderedFrames % 5 === 0 || renderedFrames === totalFrames) {
+        recordSpinner.update(`Rendering frame-by-frame: frame ${renderedFrames}/${totalFrames} (${Math.round((renderedFrames / totalFrames) * 100)}%)...`);
+      }
+    }
 
-        setScrollPos(maxScrollDist * progress);
+    recordSpinner.update(`Finalizing high-fidelity MP4...`);
+    ffmpegProc.stdin.end();
 
-        if (linearProgress < 1) {
-          window.requestAnimationFrame(step);
-        } else {
-          setScrollPos(maxScrollDist);
+    await new Promise((resolve, reject) => {
+      ffmpegProc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg exited with error code ${code}: ${ffmpegErr}`));
+      });
+      ffmpegProc.on('error', reject);
+    });
+
+    await page.close();
+    await context.close();
+    await browser.close();
+
+    recordSpinner.stop('✔', `Rendered ${totalFrames} frames smoothly at ${fps} FPS`);
+  } else {
+    const recordSpinner = new TerminalSpinner(`Recording page scroll (${durationSec}s @ ${fps} FPS)...`);
+    recordSpinner.start();
+
+    // Initial pause at top
+    if (pauseStartSec > 0) {
+      await page.waitForTimeout(pauseStartSec * 1000);
+    }
+
+    // Perform smooth programmatic scroll
+    const durationMs = durationSec * 1000;
+    await page.evaluate(({ duration, easing }) => {
+      return new Promise((resolve) => {
+        const doc = document.documentElement;
+        const body = document.body;
+
+        let targetElement = null;
+        let maxScroll = Math.max(doc.scrollHeight, body ? body.scrollHeight : 0);
+
+        const allElements = document.querySelectorAll('*');
+        for (const el of allElements) {
+          if (el.scrollHeight > maxScroll) {
+            const style = window.getComputedStyle(el);
+            if (['auto', 'scroll'].includes(style.overflowY) || ['auto', 'scroll'].includes(style.overflow)) {
+              maxScroll = el.scrollHeight;
+              targetElement = el;
+            }
+          }
+        }
+
+        const setScrollPos = (pos) => {
+          if (targetElement) {
+            targetElement.scrollTop = pos;
+          }
+          window.scrollTo(0, pos);
+          if (doc) doc.scrollTop = pos;
+          if (body) body.scrollTop = pos;
+        };
+
+        const easeInOutCubic = (t) => {
+          return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        };
+
+        const startTime = performance.now();
+
+        const step = (currentTime) => {
+          const elapsed = currentTime - startTime;
+          const linearProgress = Math.min(elapsed / duration, 1);
+          const progress = easing === 'linear' ? linearProgress : easeInOutCubic(linearProgress);
+
+          const currentClientHeight = targetElement ? targetElement.clientHeight : window.innerHeight;
+          const currentScrollHeight = targetElement ? targetElement.scrollHeight : Math.max(
+            body ? body.scrollHeight : 0,
+            body ? body.offsetHeight : 0,
+            doc.clientHeight,
+            doc.scrollHeight,
+            doc.offsetHeight
+          );
+          const maxScrollDist = Math.max(0, currentScrollHeight - currentClientHeight);
+
+          setScrollPos(maxScrollDist * progress);
+
+          if (linearProgress < 1) {
+            window.requestAnimationFrame(step);
+          } else {
+            setScrollPos(maxScrollDist);
+            resolve();
+          }
+        };
+
+        window.requestAnimationFrame(step);
+      });
+    }, { duration: durationMs, easing: easingType });
+
+    // Pause at bottom
+    if (pauseEndSec > 0) {
+      await page.waitForTimeout(pauseEndSec * 1000);
+    }
+
+    const video = page.video();
+    await page.close();
+    await context.close();
+    await browser.close();
+
+    const tempVideoPath = await video.path();
+    recordSpinner.stop('✔', 'Raw capture completed');
+
+    // Transcoding via FFmpeg with spinner and clean progress
+    const encodeSpinner = new TerminalSpinner(`Encoding high-fidelity MP4 (${fps} FPS)...`);
+    encodeSpinner.start();
+
+    const ffmpegArgs = [
+      '-y',
+      '-nostdin',
+      '-loglevel', 'error',
+      '-progress', 'pipe:1',
+      '-i', tempVideoPath,
+      '-filter:v', `fps=${fps}`,
+      '-c:v', 'libx264',
+      '-preset', 'medium',
+      '-crf', '12',
+      '-pix_fmt', 'yuv420p',
+      finalOutPath
+    ];
+
+    await new Promise((resolve, reject) => {
+      const proc = spawn('ffmpeg', ffmpegArgs);
+
+      proc.stdout.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          if (line.startsWith('frame=')) {
+            const frameNum = line.split('=')[1].trim();
+            encodeSpinner.update(`Encoding high-fidelity MP4 (${fps} FPS)... frame ${frameNum}`);
+          }
+        }
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
           resolve();
+        } else {
+          reject(new Error(`FFmpeg exited with error code ${code}`));
         }
-      };
+      });
 
-      window.requestAnimationFrame(step);
+      proc.on('error', reject);
     });
-  }, { duration: durationMs, easing: easingType });
 
-  // Pause at bottom
-  if (pauseEndSec > 0) {
-    await page.waitForTimeout(pauseEndSec * 1000);
+    encodeSpinner.stop('✔', `Encoding finished (${fps} FPS)`);
   }
-
-  const video = page.video();
-  await page.close();
-  await context.close();
-  await browser.close();
-
-  const tempVideoPath = await video.path();
-  recordSpinner.stop('✔', 'Raw capture completed');
-
-  // Transcoding via FFmpeg with spinner and clean progress
-  const encodeSpinner = new TerminalSpinner(`Encoding high-fidelity MP4 (${fps} FPS)...`);
-  encodeSpinner.start();
-
-  const ffmpegArgs = [
-    '-y',
-    '-nostdin',
-    '-loglevel', 'error',
-    '-progress', 'pipe:1',
-    '-i', tempVideoPath,
-    '-filter:v', `fps=${fps}`,
-    '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', '12',
-    '-pix_fmt', 'yuv420p',
-    finalOutPath
-  ];
-
-  await new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', ffmpegArgs);
-
-    proc.stdout.on('data', (data) => {
-      const lines = data.toString().split('\n');
-      for (const line of lines) {
-        if (line.startsWith('frame=')) {
-          const frameNum = line.split('=')[1].trim();
-          encodeSpinner.update(`Encoding high-fidelity MP4 (${fps} FPS)... frame ${frameNum}`);
-        }
-      }
-    });
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`FFmpeg exited with error code ${code}`));
-      }
-    });
-
-    proc.on('error', reject);
-  });
-
-  encodeSpinner.stop('✔', `Encoding finished (${fps} FPS)`);
 
   // Cleanup scratch temp directory
   fs.rmSync(tempDir, { recursive: true, force: true });

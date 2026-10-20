@@ -49,7 +49,16 @@ Make sure `~/.local/bin` is in your system's `PATH`.
 web-record http://localhost:5173 --preset reels
 ```
 
-### 2. High-Framerate Social Media Presets
+### 1. Ultra-Smooth Butter Mode (Recommended for Zero-Jitter Showcases)
+```bash
+# Capture with deterministic frame-by-frame rendering (silky smooth, zero dropped frames)
+web-record http://localhost:5173 --mode frame --preset reels --speed slow
+
+# Custom 60 FPS or 120 FPS frame capture
+web-record http://localhost:5173 --mode frame --preset reels --fps 60 --duration 15
+```
+
+### 2. Standard High-Framerate Social Media Presets
 ```bash
 # Instagram Reels / TikTok (9:16 Vertical, 200 FPS, Medium Pace)
 web-record http://localhost:5173 --preset reels --speed medium --fps 200
@@ -90,6 +99,7 @@ web-record https://example.com --preset reels --speed slow --fps 150
 | Flag | Type | Choices / Default | Description |
 | --- | --- | --- | --- |
 | `<URL>` | `string` | *(Required)* | Target URL (`http://localhost:...` or `https://...`) |
+| `--mode` | `string` | `realtime` (default), `frame` | Recording engine (`realtime` = Playwright screencast, `frame` = deterministic butter-smooth capture) |
 | `--preset` | `string` | `desktop` (default), `reels`, `feed` | Viewport aspect ratio preset |
 | `--speed` | `string` | `slow` (default), `medium`, `fast` | Preconfigured scroll duration (`slow`: 18s, `medium`: 12s, `fast`: 7s). Also accepts aliases: `lambat`, `lumayan`, `cepat`. |
 | `--fps` | `number` | `100`, `150` (default), `200`, `250` | Video framerate output |
